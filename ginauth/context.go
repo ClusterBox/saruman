@@ -10,6 +10,15 @@ import (
 const (
 	tenantIDKey = "tenant_id"
 	userIDKey   = "user_id"
+
+	// permissionsKey memoizes the loaded permission set for one request, so a
+	// route checking two permissions queries once.
+	permissionsKey = "permissions"
+
+	// permissionLoaderKey carries Options.PermissionLoader from Middleware to
+	// RequirePermission, which runs as a separate per-route handler and so
+	// cannot close over Options itself.
+	permissionLoaderKey = "permission_loader"
 )
 
 // MustGetTenantID returns the verified tenant ID set by Middleware. Panics if

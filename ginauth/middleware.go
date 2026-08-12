@@ -45,6 +45,11 @@ type Options struct {
 	// middleware neither requires nor reads it. Flip to true only after the
 	// pre-token Lambda stamps userId.
 	RequireUserID bool
+
+	// PermissionLoader resolves the caller's permissions for RequirePermission.
+	// Leave nil unless a route uses RequirePermission — that middleware panics
+	// rather than allowing a request through when the loader is missing.
+	PermissionLoader PermissionLoader
 }
 
 // Middleware verifies the bearer token and derives identity ONLY from the
@@ -112,6 +117,7 @@ func Middleware(v cognito.Verifier, opts Options) gin.HandlerFunc {
 		if opts.RequireUserID {
 			c.Set(userIDKey, userID)
 		}
+		c.Set(permissionLoaderKey, opts.PermissionLoader)
 		c.Next()
 	}
 }
