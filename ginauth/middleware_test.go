@@ -291,16 +291,35 @@ func TestMiddleware_CorporateAdmin(t *testing.T) {
 
 // Regression: a caller with a VALID tenantId claim must not be affected by
 // AllowCorporateAdmin or X-Business-Id in any way — the header must be read
-// only when TenantID() itself came back ErrClaimMissing.
+// only when TenantID() itself came back ErrClaimMissing. Asserts the actual
+// resolved tenant, not just the status code: a regression that let the header
+// overwrite a valid claim's tenant would still return 200 and pass a
+// status-only check, silently reopening the IDOR this feature must not reopen.
 func TestMiddleware_CorporateAdmin_IgnoredWhenTenantClaimPresent(t *testing.T) {
 	realTenant := uuid.New()
 	otherBusiness := uuid.New()
+	v := &stubVerifier{claims: jwt.MapClaims{"tenantId": realTenant.String()}}
 
-	w := serveCorporate(t,
-		jwt.MapClaims{"tenantId": realTenant.String()},
-		Options{AllowCorporateAdmin: true},
-		otherBusiness.String(),
-	)
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(Middleware(v, Options{AllowCorporateAdmin: true}))
+	r.GET("/x", func(c *gin.Context) {
+		got := MustGetTenantID(c)
+		if got == otherBusiness {
+			t.Fatal("SECURITY: X-Business-Id overwrote a valid tenantId claim")
+		}
+		if got != realTenant {
+			t.Fatalf("want claim tenant %s, got %s", realTenant, got)
+		}
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest("GET", "/x", nil)
+	req.Header.Set("Authorization", "Bearer ok")
+	req.Header.Set("X-Business-Id", otherBusiness.String())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d (body: %s)", w.Code, w.Body.String())
 	}
