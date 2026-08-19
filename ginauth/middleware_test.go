@@ -201,6 +201,138 @@ func TestMiddleware_UserIDNotRequiredByDefault(t *testing.T) {
 	}
 }
 
+// serveCorporate builds a request with an Authorization header carrying the given
+// claims and, when non-empty, an X-Business-Id header — for exercising the
+// corporate-admin branch, which needs two headers where serve() only sets one.
+func serveCorporate(t *testing.T, claims jwt.MapClaims, opts Options, businessHeader string) *httptest.ResponseRecorder {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(Middleware(&stubVerifier{claims: claims}, opts))
+	r.GET("/x", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	req := httptest.NewRequest("GET", "/x", nil)
+	req.Header.Set("Authorization", "Bearer ok")
+	if businessHeader != "" {
+		req.Header.Set("X-Business-Id", businessHeader)
+	}
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+func TestMiddleware_CorporateAdmin(t *testing.T) {
+	a := uuid.New()
+	b := uuid.New()
+	corpClaims := jwt.MapClaims{"corpBusinessIds": a.String() + "," + b.String()}
+
+	cases := []struct {
+		name           string
+		claims         jwt.MapClaims
+		opts           Options
+		businessHeader string
+		wantCode       int
+		wantErr        string // "" means 200 expected
+	}{
+		{
+			name:     "AllowCorporateAdmin false: no tenantId still 401s exactly as today",
+			claims:   corpClaims,
+			opts:     Options{},
+			wantCode: 401, wantErr: "missing_tenant_claim",
+		},
+		{
+			name:     "AllowCorporateAdmin true, no corpBusinessIds claim either: 401 missing_tenant_claim",
+			claims:   jwt.MapClaims{"sub": "u1"},
+			opts:     Options{AllowCorporateAdmin: true},
+			wantCode: 401, wantErr: "missing_tenant_claim",
+		},
+		{
+			name:     "AllowCorporateAdmin true, corpBusinessIds present, header missing: 400",
+			claims:   corpClaims,
+			opts:     Options{AllowCorporateAdmin: true},
+			wantCode: 400, wantErr: "missing_business_header",
+		},
+		{
+			name:           "AllowCorporateAdmin true, header not a uuid: 400",
+			claims:         corpClaims,
+			opts:           Options{AllowCorporateAdmin: true},
+			businessHeader: "not-a-uuid",
+			wantCode:       400, wantErr: "invalid_business_header",
+		},
+		{
+			name:           "AllowCorporateAdmin true, header valid uuid but not in claim list: 403",
+			claims:         corpClaims,
+			opts:           Options{AllowCorporateAdmin: true},
+			businessHeader: uuid.New().String(),
+			wantCode:       403, wantErr: "forbidden_tenant",
+		},
+		{
+			name:           "AllowCorporateAdmin true, header valid uuid in claim list: 200",
+			claims:         corpClaims,
+			opts:           Options{AllowCorporateAdmin: true},
+			businessHeader: b.String(),
+			wantCode:       200, wantErr: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := serveCorporate(t, tc.claims, tc.opts, tc.businessHeader)
+			if w.Code != tc.wantCode {
+				t.Fatalf("status = %d, want %d (body: %s)", w.Code, tc.wantCode, w.Body.String())
+			}
+			if tc.wantErr != "" {
+				if got := errCode(t, w); got != tc.wantErr {
+					t.Fatalf("error code = %q, want %q", got, tc.wantErr)
+				}
+			}
+		})
+	}
+}
+
+// Regression: a caller with a VALID tenantId claim must not be affected by
+// AllowCorporateAdmin or X-Business-Id in any way — the header must be read
+// only when TenantID() itself came back ErrClaimMissing.
+func TestMiddleware_CorporateAdmin_IgnoredWhenTenantClaimPresent(t *testing.T) {
+	realTenant := uuid.New()
+	otherBusiness := uuid.New()
+
+	w := serveCorporate(t,
+		jwt.MapClaims{"tenantId": realTenant.String()},
+		Options{AllowCorporateAdmin: true},
+		otherBusiness.String(),
+	)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d (body: %s)", w.Code, w.Body.String())
+	}
+}
+
+func TestMiddleware_CorporateAdmin_SetsSameContextKeyAsNormalPath(t *testing.T) {
+	a := uuid.New()
+	b := uuid.New()
+	claims := jwt.MapClaims{"corpBusinessIds": a.String() + "," + b.String()}
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(Middleware(&stubVerifier{claims: claims}, Options{AllowCorporateAdmin: true}))
+	r.GET("/x", func(c *gin.Context) {
+		if MustGetTenantID(c) != b {
+			t.Error("tenant context was not set to the selected business")
+		}
+		if got, ok := GetTenantID(c); !ok || got != b {
+			t.Error("GetTenantID mismatch")
+		}
+		c.Status(http.StatusOK)
+	})
+	req := httptest.NewRequest("GET", "/x", nil)
+	req.Header.Set("Authorization", "Bearer ok")
+	req.Header.Set("X-Business-Id", b.String())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+}
+
 func TestGetters_OutsideMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
