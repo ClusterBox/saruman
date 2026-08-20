@@ -19,8 +19,11 @@ go get github.com/clusterbox/saruman@v0.1.0
   validation, and an injectable per-service hook. Error bodies are the
   services' historical `{"error", "message"}` shapes, byte-for-byte.
 
-Tenant (and user) identity is read **only** from the verified token claims —
-never from a header, body, query, or path parameter.
+Tenant (and user) identity is read **only** from verified token claims — never
+trusted from a header, body, query, or path parameter on its own. The one
+refinement: an opted-in route (`ginauth.Options.AllowCorporateAdmin`) may let a
+caller SELECT among tenants their own signed claim already grants via an
+`X-Business-Id` header — the header picks WHICH, the claim gates WHETHER.
 
 ## Usage
 
