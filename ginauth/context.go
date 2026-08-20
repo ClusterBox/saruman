@@ -19,6 +19,13 @@ const (
 	// RequirePermission, which runs as a separate per-route handler and so
 	// cannot close over Options itself.
 	permissionLoaderKey = "permission_loader"
+
+	// corporateBusinessIDsKey carries the corporate admin's full administered
+	// business set, set by CorporateMiddleware. Deliberately distinct from
+	// tenantIDKey: a corporate-scoped route has no single tenant, and conflating
+	// the two would let a tenant-scoped handler read something plausible-looking
+	// on a route that never resolved one.
+	corporateBusinessIDsKey = "corporate_business_ids"
 )
 
 // MustGetTenantID returns the verified tenant ID set by Middleware. Panics if
@@ -60,4 +67,30 @@ func GetUserID(c *gin.Context) (uuid.UUID, bool) {
 	}
 	id, ok := val.(uuid.UUID)
 	return id, ok
+}
+
+// MustGetCorporateBusinessIDs returns the verified business IDs set by
+// CorporateMiddleware. Panics if called on a route that middleware does not
+// protect (programming error).
+//
+// The slice is in claim order, is NOT deduplicated (a malformed claim listing an
+// id twice yields it twice), and must not be mutated: handlers in the same
+// request share the backing array.
+func MustGetCorporateBusinessIDs(c *gin.Context) []uuid.UUID {
+	val, exists := c.Get(corporateBusinessIDsKey)
+	if !exists {
+		panic("MustGetCorporateBusinessIDs called without ginauth.CorporateMiddleware")
+	}
+	return val.([]uuid.UUID)
+}
+
+// GetCorporateBusinessIDs is the non-panicking form of
+// MustGetCorporateBusinessIDs.
+func GetCorporateBusinessIDs(c *gin.Context) ([]uuid.UUID, bool) {
+	val, exists := c.Get(corporateBusinessIDsKey)
+	if !exists {
+		return nil, false
+	}
+	ids, ok := val.([]uuid.UUID)
+	return ids, ok
 }

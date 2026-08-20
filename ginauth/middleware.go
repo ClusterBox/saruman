@@ -1,6 +1,13 @@
-// Package ginauth is the gin glue over saruman's cognito verifier: one shared
-// middleware for all Clusterbox Go services, with per-service policy injected
-// via Options.
+// Package ginauth is the gin glue over saruman's cognito verifier for all
+// Clusterbox Go services, with per-service policy injected via Options.
+//
+// Two middlewares, for two different access shapes:
+//
+//   - Middleware is tenant-scoped: it resolves exactly ONE tenant per request
+//     and puts it in context for MustGetTenantID.
+//   - CorporateMiddleware is corporate-scoped: it resolves the caller's full set
+//     of administered businesses and sets NO tenant, so MustGetTenantID panics
+//     on those routes by design.
 package ginauth
 
 import (
