@@ -352,6 +352,37 @@ func TestMiddleware_CorporateAdmin_SetsSameContextKeyAsNormalPath(t *testing.T) 
 	}
 }
 
+// Regression: OnTenantResolved must run against the corporate-admin-SELECTED
+// tenant, not any identity of the caller's own — so a corporate admin picking a
+// suspended/locked/inactive business is rejected exactly like that business's
+// own user would be.
+func TestMiddleware_CorporateAdmin_OnTenantResolvedFiresWithSelectedTenant(t *testing.T) {
+	a := uuid.New()
+	b := uuid.New()
+	claims := jwt.MapClaims{"corpBusinessIds": a.String() + "," + b.String()}
+
+	var gotTenant uuid.UUID
+	opts := Options{
+		AllowCorporateAdmin: true,
+		OnTenantResolved: func(ctx context.Context, id uuid.UUID) error {
+			gotTenant = id
+			return ErrTenantSuspended
+		},
+	}
+
+	w := serveCorporate(t, claims, opts, b.String())
+
+	if gotTenant != b {
+		t.Fatalf("hook saw tenant %s, want selected business %s", gotTenant, b)
+	}
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+	if got := errCode(t, w); got != "account_suspended" {
+		t.Fatalf("error code = %q, want account_suspended", got)
+	}
+}
+
 func TestGetters_OutsideMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())

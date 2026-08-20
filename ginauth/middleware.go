@@ -59,14 +59,19 @@ type Options struct {
 	// corpBusinessIds claim act on one of those businesses via the
 	// X-Business-Id header, checked against that signed claim before being
 	// trusted. Default false — every route's behavior is unchanged unless a
-	// service opts in explicitly.
+	// service opts in explicitly. A token carrying BOTH a tenantId and a
+	// corpBusinessIds claim always resolves via tenantId — the header is never
+	// read in that case.
 	AllowCorporateAdmin bool
 }
 
-// Middleware verifies the bearer token and derives identity ONLY from the
-// verified claims — never from a header, body, query, or path param. That is
-// the property that closed the original cross-tenant IDOR and must be
-// preserved.
+// Middleware verifies the bearer token and derives identity ONLY from
+// verified claims — never trusts a header, body, query, or path param on its
+// own. That is the property that closed the original cross-tenant IDOR and
+// must be preserved. The one refinement: an opted-in route (see
+// Options.AllowCorporateAdmin) may let the caller SELECT among tenants their
+// own signed claim already grants — the header picks WHICH, the claim gates
+// WHETHER, and it can never introduce a tenant the claim didn't already list.
 func Middleware(v cognito.Verifier, opts Options) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		raw := cognito.ExtractBearer(c.GetHeader("Authorization"))
@@ -98,6 +103,9 @@ func Middleware(v cognito.Verifier, opts Options) gin.HandlerFunc {
 
 			businessIDs, bizErr := claims.CorporateBusinessIDs()
 			if bizErr != nil {
+				if !errors.Is(bizErr, cognito.ErrClaimMissing) {
+					slog.Warn("corpBusinessIds claim is present but unparseable", "error", bizErr)
+				}
 				abort(c, http.StatusUnauthorized, "missing_tenant_claim",
 					"token has no tenant; complete business setup first")
 				return

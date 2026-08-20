@@ -78,6 +78,8 @@ func TestClaims_CorporateBusinessIDs(t *testing.T) {
 		{"one id", jwt.MapClaims{"corpBusinessIds": a.String()}, []uuid.UUID{a}, false, false},
 		{"two ids", jwt.MapClaims{"corpBusinessIds": a.String() + "," + b.String()}, []uuid.UUID{a, b}, false, false},
 		{"ids with spaces", jwt.MapClaims{"corpBusinessIds": a.String() + ", " + b.String()}, []uuid.UUID{a, b}, false, false},
+		{"only commas", jwt.MapClaims{"corpBusinessIds": ","}, nil, true, false},
+		{"trailing comma", jwt.MapClaims{"corpBusinessIds": a.String() + ","}, []uuid.UUID{a}, false, false},
 		{"contains a non-uuid entry", jwt.MapClaims{"corpBusinessIds": a.String() + ",nope"}, nil, false, true},
 	}
 	for _, tc := range cases {
