@@ -4,7 +4,7 @@ Shared AWS Cognito access-token verification for Clusterbox Go services — one
 auditable implementation of `Verify` instead of a copy in every repo.
 
 ```
-go get github.com/clusterbox/saruman@v0.1.0
+go get github.com/clusterbox/saruman@v0.3.0
 ```
 
 > The module path is lowercase `github.com/clusterbox/saruman` even though the
