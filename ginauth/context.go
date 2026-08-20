@@ -72,6 +72,10 @@ func GetUserID(c *gin.Context) (uuid.UUID, bool) {
 // MustGetCorporateBusinessIDs returns the verified business IDs set by
 // CorporateMiddleware. Panics if called on a route that middleware does not
 // protect (programming error).
+//
+// The slice is in claim order, is NOT deduplicated (a malformed claim listing an
+// id twice yields it twice), and must not be mutated: handlers in the same
+// request share the backing array.
 func MustGetCorporateBusinessIDs(c *gin.Context) []uuid.UUID {
 	val, exists := c.Get(corporateBusinessIDsKey)
 	if !exists {

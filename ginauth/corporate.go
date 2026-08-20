@@ -55,7 +55,8 @@ func CorporateMiddleware(v cognito.Verifier, opts CorporateOptions) gin.HandlerF
 					"token has no corporate businesses; this route is for corporate admins")
 				return
 			}
-			slog.Warn("corpBusinessIds claim is present but unparseable", "error", err)
+			slog.Warn("corpBusinessIds claim is present but unparseable",
+				"error", err, "sub", claims.Subject())
 			abort(c, http.StatusUnauthorized, "invalid_corporate_claim",
 				"corpBusinessIds claim is malformed")
 			return

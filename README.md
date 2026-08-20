@@ -15,9 +15,12 @@ go get github.com/clusterbox/saruman@v0.3.0
 - **`cognito`** — framework-agnostic (no gin, no DB): `NewVerifier` /
   `Verify` against the pool's cached, auto-refreshing JWKS, typed claim
   accessors (`TenantID`, `UserID`, `Subject`), and `ExtractBearer`.
-- **`ginauth`** — the gin middleware: bearer extraction, verification, claim
-  validation, and an injectable per-service hook. Error bodies are the
-  services' historical `{"error", "message"}` shapes, byte-for-byte.
+- **`ginauth`** — the gin middlewares: bearer extraction, verification, claim
+  validation, and an injectable per-service hook. `Middleware` is tenant-scoped,
+  resolving exactly one tenant per request; `CorporateMiddleware` is
+  corporate-scoped, resolving a corporate admin's full set of administered
+  businesses instead. Error bodies are the services' historical
+  `{"error", "message"}` shapes, byte-for-byte.
 
 Tenant (and user) identity is read **only** from verified token claims — never
 trusted from a header, body, query, or path parameter on its own. The one
@@ -63,6 +66,26 @@ tenantID, ok := ginauth.GetTenantID(c) // non-panicking form
 `Options.RequireUserID` stays `false` until the pre-token-generation Lambda
 stamps a `userId` claim; only then do `MustGetUserID` / `GetUserID` become
 available on protected routes.
+
+## Corporate-scoped routes
+
+For routes that summarize across every business a corporate admin
+administers, rather than acting on one tenant:
+
+```go
+r.Use(ginauth.CorporateMiddleware(verifier, ginauth.CorporateOptions{}))
+```
+
+In handlers:
+
+```go
+businessIDs := ginauth.MustGetCorporateBusinessIDs(c) // panics if middleware didn't run
+businessIDs, ok := ginauth.GetCorporateBusinessIDs(c)  // non-panicking form
+```
+
+These routes set no tenant, so `ginauth.MustGetTenantID` panics on them by
+design — a route needing one tenant wants `Middleware`, not
+`CorporateMiddleware`.
 
 ## Testing consumers
 

@@ -90,10 +90,11 @@ func TestCorporateMiddleware_DoesNotSetTenantID(t *testing.T) {
 	a := uuid.New()
 	v := &stubVerifier{claims: jwt.MapClaims{"corpBusinessIds": a.String()}}
 
-	var tenantSet, panicked bool
+	var tenantSet, panicked, rawSet bool
 
 	w := serveCorporateScope(t, v, "Bearer ok", func(c *gin.Context) {
 		_, tenantSet = GetTenantID(c)
+		_, rawSet = c.Get(tenantIDKey)
 		// Isolated so the recover cannot swallow an unrelated panic and so the
 		// handler continues normally afterwards.
 		func() {
@@ -111,6 +112,9 @@ func TestCorporateMiddleware_DoesNotSetTenantID(t *testing.T) {
 	}
 	if !panicked {
 		t.Error("MustGetTenantID must panic on a corporate-scoped route")
+	}
+	if rawSet {
+		t.Error("the raw tenant_id key must not be set on a corporate-scoped route")
 	}
 }
 
