@@ -4,7 +4,7 @@ Shared AWS Cognito access-token verification for Clusterbox Go services — one
 auditable implementation of `Verify` instead of a copy in every repo.
 
 ```
-go get github.com/clusterbox/saruman@v0.4.0
+go get github.com/clusterbox/saruman@v0.5.0
 ```
 
 > The module path is lowercase `github.com/clusterbox/saruman` even though the
@@ -21,6 +21,12 @@ go get github.com/clusterbox/saruman@v0.4.0
   corporate-scoped, resolving a corporate admin's full set of administered
   businesses instead. Error bodies are the services' historical
   `{"error", "message"}` shapes, byte-for-byte.
+- **`entitlements`** — plan limits and feature gating. `NewResolver(db, ttl)`
+  reads Aragorn's `tenant_entitlements()` SQL function (cached per tenant);
+  `RequireFeature(resolver, entitlements.FeatureInvoices)` refuses with
+  `403 {"error":"plan_upgrade_required","feature","requiredPlan"}`;
+  `WriteContactLimitReached` / `WriteContactLocked` write the other two
+  plan-limit errors. Feature keys mirror Aragorn's `PlanFeatures`.
 
 Tenant (and user) identity is read **only** from verified token claims — never
 trusted from a header, body, query, or path parameter on its own. The one
@@ -66,6 +72,16 @@ tenantID, ok := ginauth.GetTenantID(c) // non-panicking form
 `Options.RequireUserID` stays `false` until the pre-token-generation Lambda
 stamps a `userId` claim; only then do `MustGetUserID` / `GetUserID` become
 available on protected routes.
+
+## Plan gating
+
+```go
+res := entitlements.NewResolver(db, 30*time.Second) // db: *sql.DB or *sqlx.DB
+invoices := protected.Group("/invoices", entitlements.RequireFeature(res, entitlements.FeatureInvoices))
+```
+
+Mount `RequireFeature` after `ginauth.Middleware`. Never mount it on a
+corporate-scoped route: there is no single tenant, so it answers 500.
 
 ## Corporate-scoped routes
 
