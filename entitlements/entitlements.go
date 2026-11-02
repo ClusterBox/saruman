@@ -54,6 +54,8 @@ type Resolver struct {
 	findPlan PlanFinder
 	ttl      time.Duration
 	cache    sync.Map // uuid.UUID -> cached
+	// onRefused counts refusals (see SetRefusalRecorder); nil counts none.
+	onRefused RefusalRecorder
 }
 
 // NewResolver reads tenant_entitlements() through db.

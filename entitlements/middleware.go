@@ -30,6 +30,7 @@ func RequireFeature(r *Resolver, feature string) gin.HandlerFunc {
 			return
 		}
 		if !e.Has(feature) {
+			r.RecordRefusal(c.Request.Context(), tenantID, feature)
 			WritePlanUpgradeRequired(c, feature, r.RequiredPlanFor(c.Request.Context(), feature))
 			return
 		}
