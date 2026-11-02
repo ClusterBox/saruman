@@ -83,6 +83,17 @@ invoices := protected.Group("/invoices", entitlements.RequireFeature(res, entitl
 Mount `RequireFeature` after `ginauth.Middleware`. Never mount it on a
 corporate-scoped route: there is no single tenant, so it answers 500.
 
+To count refusals in Aragorn's `plan_refusals` (smaug's trial offer reads it),
+give the resolver a recorder. Counting runs in the background and never
+changes the refusal:
+
+```go
+res.SetRefusalRecorder(entitlements.SQLRefusalRecorder(db))
+// A handler that refuses by hand (e.g. after reading the body) counts too:
+res.RecordRefusal(ctx, tenantID, feature)
+entitlements.WritePlanUpgradeRequired(c, feature, res.RequiredPlanFor(ctx, feature))
+```
+
 ## Corporate-scoped routes
 
 For routes that summarize across every business a corporate admin
